@@ -1,0 +1,25 @@
+// boards package (ODD Section 3.4, Table 11).
+
+enum SaveTargetType {
+  POST
+  OPPORTUNITY
+  GROUP
+
+  @@map("save_target_type")
+}
+
+/// Private save of a post, opportunity or group; the target is polymorphic (no FK).
+model SavedItem {
+  id         String         @id @default(uuid(7)) @db.Uuid
+  memberId   String         @map("member_id") @db.Uuid
+  targetType SaveTargetType @map("target_type")
+  targetId   String         @map("target_id") @db.Uuid
+  createdAt  DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  member MemberAccount @relation(fields: [memberId], references: [id])
+
+  @@unique([memberId, targetType, targetId])
+  @@index([targetType, targetId])
+  @@index([memberId, createdAt(sort: Desc)])
+  @@map("saved_item")
+}

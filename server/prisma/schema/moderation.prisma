@@ -1,0 +1,174 @@
+// moderation package (ODD Section 3.9, Table 21).
+
+enum ReportTargetType {
+  POST
+  COMMENT
+  OPPORTUNITY
+
+  @@map("report_target_type")
+}
+
+enum GuidelineCategory {
+  HARASSMENT
+  SPAM
+  IMPERSONATION
+  PRIVATE_INFORMATION
+  FALSE_INFORMATION
+
+  @@map("guideline_category")
+}
+
+enum ReportState {
+  PENDING
+  UPHELD
+  DISMISSED
+
+  @@map("report_state")
+}
+
+enum ConsequenceKind {
+  WARNING
+  RESTRICTION
+
+  @@map("consequence_kind")
+}
+
+enum AuditAction {
+  ALUMNI_REVIEWED
+  GRADUATION_DECIDED
+  STAFF_EMAIL_ADDED
+  STAFF_EMAIL_REMOVED
+  ROLE_CORRECTED
+  MEMBER_EMAIL_UPDATED
+  ACCOUNT_DISABLED
+  ACCOUNT_RESTORED
+  FAKE_ACCOUNT_DELETED
+  ADMINISTRATOR_CREATED
+  ADMINISTRATOR_MFA_RESET
+  ADMINISTRATOR_REMOVED
+  ADMINISTRATOR_EMAIL_CHANGED
+  REPORT_DECIDED
+
+  @@map("audit_action")
+}
+
+/// Outcome of a REPORT_DECIDED record; UPHELD_NO_CONSEQUENCE when the author's account was deleted.
+enum AuditOutcome {
+  DISMISSED
+  UPHELD_WARNING
+  UPHELD_RESTRICTION
+  UPHELD_NO_CONSEQUENCE
+
+  @@map("audit_outcome")
+}
+
+/// A report of a post, comment or opportunity; target is polymorphic (no FK).
+/// At most one PENDING per reporter and item.
+model Report {
+  id            String            @id @default(uuid(7)) @db.Uuid
+  /// Null after the reporter's account is deleted.
+  reporterId    String?           @map("reporter_id") @db.Uuid
+  targetType    ReportTargetType  @map("target_type")
+  targetId      String            @map("target_id") @db.Uuid
+  targetVersion Int               @map("target_version")
+  reason        GuidelineCategory
+  details       String?           @db.VarChar(1000)
+  state         ReportState       @default(PENDING)
+  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  decidedAt     DateTime?         @map("decided_at") @db.Timestamptz(6)
+
+  reporter     MemberAccount?       @relation(fields: [reporterId], references: [id], onDelete: SetNull)
+  evidence     ModerationEvidence[]
+  auditRecords AuditRecord[]
+
+  @@unique([reporterId, targetType, targetId], where: { state: "PENDING" }, map: "report_one_pending_key")
+  @@index([state, createdAt])
+  @@index([targetType, targetId])
+  @@index([reporterId, createdAt(sort: Desc)])
+  @@map("report")
+}
+
+/// Copy of reported content taken at submission; visible only to Administrators.
+model ModerationEvidence {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  reportId     String    @map("report_id") @db.Uuid
+  snapshotText String?   @map("snapshot_text")
+  /// A held post image (PostImage.evidenceHold).
+  imageRef     String?   @map("image_ref") @db.Uuid
+  /// Null while the report is pending, then seven days after the decision.
+  purgeAfter   DateTime? @map("purge_after") @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  report Report     @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  image  PostImage? @relation(fields: [imageRef], references: [id], onDelete: Restrict)
+
+  @@index([reportId])
+  @@index([purgeAfter])
+  @@map("moderation_evidence")
+}
+
+/// An upheld breach by the author of one content item; one per item.
+model Violation {
+  id               String           @id @default(uuid(7)) @db.Uuid
+  memberId         String           @map("member_id") @db.Uuid
+  targetType       ReportTargetType @map("target_type")
+  targetId         String           @map("target_id") @db.Uuid
+  decidedByAdminId String?          @map("decided_by_admin_id") @db.Uuid
+  decisionAt       DateTime         @map("decision_at") @db.Timestamptz(6)
+
+  member      MemberAccount         @relation(fields: [memberId], references: [id])
+  decidedBy   AdministratorAccount? @relation(fields: [decidedByAdminId], references: [id], onDelete: SetNull)
+  consequence Consequence?
+
+  @@unique([targetType, targetId])
+  @@index([memberId])
+  @@map("violation")
+}
+
+/// The one consequence of a violation; restrictUntil is set only for RESTRICTION (CHECK).
+model Consequence {
+  id            String          @id @default(uuid(7)) @db.Uuid
+  memberId      String          @map("member_id") @db.Uuid
+  violationId   String          @unique @map("violation_id") @db.Uuid
+  kind          ConsequenceKind
+  restrictUntil DateTime?       @map("restrict_until") @db.Timestamptz(6)
+  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  member    MemberAccount @relation(fields: [memberId], references: [id])
+  violation Violation     @relation(fields: [violationId], references: [id])
+
+  @@index([memberId, kind, restrictUntil])
+  @@map("consequence")
+}
+
+/// Append-only record of one Administrator action (NFR-7). A trigger refuses any change other
+/// than removing references (anonymization) and any deletion before purge_after.
+model AuditRecord {
+  id             String        @id @default(uuid(7)) @db.Uuid
+  actorAdminId   String?       @map("actor_admin_id") @db.Uuid
+  targetMemberId String?       @map("target_member_id") @db.Uuid
+  targetAdminId  String?       @map("target_admin_id") @db.Uuid
+  actionCode     AuditAction   @map("action_code")
+  /// Set for REPORT_DECIDED only.
+  outcome        AuditOutcome?
+  /// The decided report, for REPORT_DECIDED.
+  reportId       String?       @map("report_id") @db.Uuid
+  reason         String?       @db.VarChar(1000)
+  occurredAt     DateTime      @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  /// Set one year after a referenced account is deleted, when its reference is removed.
+  purgeAfter     DateTime?     @map("purge_after") @db.Timestamptz(6)
+
+  actorAdmin   AdministratorAccount? @relation("AuditActorAdmin", fields: [actorAdminId], references: [id], onDelete: SetNull)
+  targetAdmin  AdministratorAccount? @relation("AuditTargetAdmin", fields: [targetAdminId], references: [id], onDelete: SetNull)
+  targetMember MemberAccount?        @relation(fields: [targetMemberId], references: [id], onDelete: SetNull)
+  report       Report?               @relation(fields: [reportId], references: [id], onDelete: SetNull)
+
+  @@index([occurredAt(sort: Desc)])
+  @@index([actorAdminId])
+  @@index([targetMemberId])
+  @@index([targetAdminId])
+  @@index([actionCode, occurredAt])
+  @@index([purgeAfter])
+  @@index([reportId])
+  @@map("audit_record")
+}

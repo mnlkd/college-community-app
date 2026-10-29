@@ -1,0 +1,118 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/manrope/index.css';
+@import '@fontsource-variable/inter/index.css';
+
+@theme {
+  /* Manrope carries headings and interface labels; Inter carries reading text. */
+  --font-display: 'Manrope Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace;
+
+  /* Radix "iris" — accent. Step 9 = solid fill, step 11 = accessible text.
+     Chosen over the college blue #224CC2 so the platform reads as its own
+     product while staying in the same part of the spectrum. */
+  --color-iris-1: #fdfdff;
+  --color-iris-2: #f8f8ff;
+  --color-iris-3: #f0f1fe;
+  --color-iris-4: #e6e7ff;
+  --color-iris-5: #dadcff;
+  --color-iris-6: #cbcdff;
+  --color-iris-7: #b8baf8;
+  --color-iris-8: #9b9ef0;
+  --color-iris-9: #5b5bd6;
+  --color-iris-10: #5151cd;
+  --color-iris-11: #5753c6;
+  --color-iris-12: #272962;
+
+  /* Radix "slate" — neutral, hue-matched to iris. */
+  --color-slate-1: #fcfcfd;
+  --color-slate-2: #f9f9fb;
+  --color-slate-3: #f0f0f3;
+  --color-slate-4: #e8e8ec;
+  --color-slate-5: #e0e1e6;
+  --color-slate-6: #d9d9e0;
+  --color-slate-7: #cdced6;
+  --color-slate-8: #b9bbc6;
+  /* Steps 9 and 10 carry secondary text, so they are darker than Radix to reach WCAG 2.1 AA
+     contrast (4.5:1) on white and on slate-2/3 surfaces (NFR-3). */
+  --color-slate-9: #686b74;
+  --color-slate-10: #656871;
+  --color-slate-11: #60646c;
+  --color-slate-12: #1c2024;
+
+  /* Role and status hues. Alumni read amber, Staff read blue, Student reads iris. */
+  --color-amber-2: #fefbe9;
+  --color-amber-3: #fff7c2;
+  --color-amber-4: #ffee9c;
+  --color-amber-6: #f3d673;
+  --color-amber-7: #e9c162;
+  --color-amber-9: #ffc53d;
+  /* Step 11 of each hue is darkened from Radix to reach 4.5:1 on its tinted badge fills. */
+  --color-amber-11: #985700;
+  --color-amber-12: #4f3422;
+
+  --color-blue-2: #f4faff;
+  --color-blue-3: #e6f4fe;
+  --color-blue-4: #d5efff;
+  --color-blue-6: #a9d4fd;
+  --color-blue-7: #8ec8f6;
+  --color-blue-9: #0090ff;
+  --color-blue-11: #0b67b6;
+  --color-blue-12: #113264;
+
+  --color-red-2: #fff7f7;
+  --color-red-3: #ffefef;
+  --color-red-4: #ffe5e5;
+  --color-red-6: #f9c6c6;
+  --color-red-7: #eb9091;
+  --color-red-9: #e5484d;
+  --color-red-11: #c0262b;
+  --color-red-12: #641723;
+
+  --color-green-2: #f4fbf6;
+  --color-green-3: #e9f9ee;
+  --color-green-6: #a9dfbf;
+  --color-green-7: #8bce9f;
+  --color-green-9: #30a46c;
+  --color-green-11: #1b7149;
+  --color-green-12: #193b2d;
+
+  /* Emil: the built-in easings are too weak; use strong custom curves. */
+  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
+
+  --shadow-xs: 0 1px 2px rgba(28, 32, 36, 0.05);
+  --shadow-sm: 0 1px 2px rgba(28, 32, 36, 0.06), 0 1px 1px rgba(28, 32, 36, 0.04);
+  --shadow-md: 0 2px 4px -1px rgba(28, 32, 36, 0.06), 0 12px 24px -10px rgba(28, 32, 36, 0.14);
+  --shadow-lg: 0 4px 8px -2px rgba(28, 32, 36, 0.08), 0 24px 48px -16px rgba(28, 32, 36, 0.2);
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  color: var(--color-slate-12);
+  background: var(--color-slate-2);
+}
+
+h1,
+h2,
+h3,
+h4,
+.font-display {
+  font-family: var(--font-display);
+}
+
+*:focus-visible {
+  outline: 2px solid var(--color-iris-8);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

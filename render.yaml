@@ -1,0 +1,44 @@
+# Render Blueprint for the Express server. The client is served by Vercel,
+# which rewrites /api to this service. Secrets are entered in the Render dashboard (sync: false).
+services:
+  - type: web
+    name: hilcoe-commons-api
+    runtime: node
+    # Same region as the Supabase project (eu-central-1), so each query is a short round trip.
+    region: frankfurt
+    plan: free
+    branch: main
+    autoDeployTrigger: commit
+    buildCommand: >-
+      npm ci --include=dev &&
+      npm run build -w shared &&
+      npm run build -w server &&
+      npm run db:migrate -w server
+    startCommand: npm run start -w server
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: '24'
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      # Render's proxy is one hop in front of the server; rate limits key on the client address.
+      - key: TRUST_PROXY
+        value: '1'
+      - key: DEMO_ENVIRONMENT
+        value: 'false'
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_SSL_CA_FILE
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: EMAIL_HASH_SECRET
+        sync: false
+      - key: SEED_PASSWORD
+        sync: false

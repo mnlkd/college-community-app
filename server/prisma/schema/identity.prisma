@@ -1,0 +1,244 @@
+// identity package (ODD Section 3.2, Table 7). Written only by identity, except the
+// restriction lookup of AuthMiddleware, which reads consequence.
+
+enum Role {
+  STUDENT
+  STAFF
+  ALUMNI
+
+  @@map("role")
+}
+
+enum AlumniStatus {
+  SELF_REPORTED
+  VERIFIED
+  FLAGGED
+
+  @@map("alumni_status")
+}
+
+enum AccountState {
+  ACTIVE
+  DISABLED
+  DELETED
+
+  @@map("account_state")
+}
+
+enum AdminState {
+  ACTIVE
+  DISABLED
+
+  @@map("admin_state")
+}
+
+enum Programme {
+  COMPUTER_SCIENCE
+  SOFTWARE_ENGINEERING
+
+  @@map("programme")
+}
+
+enum RegistrationPath {
+  INSTITUTIONAL_EMAIL
+  PERSONAL_EMAIL
+
+  @@map("registration_path")
+}
+
+enum ReviewDecision {
+  PENDING
+  VERIFIED
+  FLAGGED
+
+  @@map("review_decision")
+}
+
+enum GraduationDecision {
+  PENDING
+  CONFIRMED
+  DECLINED
+
+  @@map("graduation_decision")
+}
+
+/// Community account. A deleted account keeps its row in the DELETED state with
+/// authUserId, email and displayName cleared, so its content shows Deleted User.
+model MemberAccount {
+  id           String        @id @default(uuid(7)) @db.Uuid
+  /// Logical reference to auth.users(id); no database FK (Supabase-managed schema).
+  authUserId   String?       @unique @map("auth_user_id") @db.Uuid
+  /// Stored in lower case (CHECK), so uniqueness holds in any letter case.
+  email        String?       @unique @db.VarChar(254)
+  displayName  String?       @map("display_name") @db.VarChar(100)
+  role         Role
+  /// Set only for ALUMNI (CHECK).
+  alumniStatus AlumniStatus? @map("alumni_status")
+  programme    Programme?
+  state        AccountState  @default(ACTIVE)
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  profile              Profile?
+  profileImages        ProfileImage[]
+  alumniReviews        AlumniReview[]
+  graduationRequests   GraduationRequest[]
+  mentorProfile        MentorProfile?
+  mentorshipsAsStudent Mentorship[]        @relation("MentorshipStudent")
+  mentorshipsAsMentor  Mentorship[]        @relation("MentorshipMentor")
+  opportunities        Opportunity[]
+  ownedGroups          Group[]
+  groupMemberships     GroupMembership[]
+  transfersProposed    GroupTransfer[]     @relation("GroupTransferFrom")
+  transfersReceived    GroupTransfer[]     @relation("GroupTransferTo")
+  posts                Post[]
+  comments             Comment[]
+  likes                Like[]
+  postViews            PostViewDay[]
+  savedItems           SavedItem[]
+  notifications        Notification[]      @relation("NotificationRecipient")
+  notificationsCaused  Notification[]      @relation("NotificationActor")
+  reports              Report[]
+  violations           Violation[]
+  consequences         Consequence[]
+  auditRecords         AuditRecord[]
+
+  @@index([role, alumniStatus, state])
+  @@map("member_account")
+}
+
+/// Role-specific profile details shown by View Member Profile.
+model Profile {
+  memberId         String   @id @map("member_id") @db.Uuid
+  bio              String?  @db.VarChar(500)
+  studyOrExpertise String?  @map("study_or_expertise") @db.VarChar(160)
+  graduationYear   Int?     @map("graduation_year") @db.SmallInt
+  currentPosition  String?  @map("current_position") @db.VarChar(160)
+  profileImageId   String?  @unique @map("profile_image_id") @db.Uuid
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  member       MemberAccount @relation(fields: [memberId], references: [id])
+  profileImage ProfileImage? @relation(fields: [profileImageId], references: [id], onDelete: SetNull)
+
+  @@map("profile")
+}
+
+/// Profile picture processed to a 512 px long edge in the private profile-images bucket.
+model ProfileImage {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  memberId   String   @map("member_id") @db.Uuid
+  storageKey String   @unique @map("storage_key")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  member  MemberAccount @relation(fields: [memberId], references: [id])
+  profile Profile?
+
+  @@index([memberId])
+  @@map("profile_image")
+}
+
+/// Separate Administrator account; never a community member. Removal deletes the row.
+model AdministratorAccount {
+  id               String     @id @default(uuid(7)) @db.Uuid
+  /// Logical reference to auth.users(id); no database FK.
+  authUserId       String     @unique @map("auth_user_id") @db.Uuid
+  email            String     @unique @db.VarChar(254)
+  state            AdminState @default(ACTIVE)
+  totpRequired     Boolean    @default(true) @map("totp_required")
+  isFirstAdmin     Boolean    @default(false) @map("is_first_admin")
+  createdByAdminId String?    @map("created_by_admin_id") @db.Uuid
+  createdAt        DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  createdBy          AdministratorAccount?  @relation("AdminCreatedBy", fields: [createdByAdminId], references: [id], onDelete: SetNull)
+  createdAdmins      AdministratorAccount[] @relation("AdminCreatedBy")
+  sessions           AdminSession[]
+  staffEmailEntries  StaffEmailEntry[]
+  alumniReviews      AlumniReview[]
+  graduationRequests GraduationRequest[]
+  blockedEmailHashes BlockedEmailHash[]
+  violations         Violation[]
+  auditRecordsActed  AuditRecord[]          @relation("AuditActorAdmin")
+  auditRecordsTarget AuditRecord[]          @relation("AuditTargetAdmin")
+
+  @@unique([isFirstAdmin], where: { isFirstAdmin: true }, map: "administrator_account_one_first_admin_key")
+  @@map("administrator_account")
+}
+
+/// One Supabase session of an Administrator, to end it after 30 minutes idle or 8 hours (NFR-1).
+model AdminSession {
+  id                String   @id @default(uuid(7)) @db.Uuid
+  adminId           String   @map("admin_id") @db.Uuid
+  supabaseSessionId String   @unique @map("supabase_session_id")
+  firstSeenAt       DateTime @map("first_seen_at") @db.Timestamptz(6)
+  lastActivityAt    DateTime @map("last_activity_at") @db.Timestamptz(6)
+  /// firstSeenAt plus 8 hours.
+  expiresAt         DateTime @map("expires_at") @db.Timestamptz(6)
+
+  admin AdministratorAccount @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId])
+  @@map("admin_session")
+}
+
+/// Institutional email on the Staff email list; lower case (CHECK).
+model StaffEmailEntry {
+  email               String   @id @db.VarChar(254)
+  active              Boolean  @default(true)
+  maintainedByAdminId String?  @map("maintained_by_admin_id") @db.Uuid
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  maintainedBy AdministratorAccount? @relation(fields: [maintainedByAdminId], references: [id], onDelete: SetNull)
+
+  @@map("staff_email_entry")
+}
+
+model AlumniReview {
+  id                 String           @id @default(uuid(7)) @db.Uuid
+  memberId           String           @map("member_id") @db.Uuid
+  registrationPath   RegistrationPath @map("registration_path")
+  claimedFullName    String           @map("claimed_full_name") @db.VarChar(100)
+  identifyingContext String?          @map("identifying_context") @db.VarChar(1000)
+  decision           ReviewDecision   @default(PENDING)
+  /// Never shown to the member.
+  privateReason      String?          @map("private_reason") @db.VarChar(1000)
+  reviewedByAdminId  String?          @map("reviewed_by_admin_id") @db.Uuid
+  decidedAt          DateTime?        @map("decided_at") @db.Timestamptz(6)
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  member     MemberAccount         @relation(fields: [memberId], references: [id])
+  reviewedBy AdministratorAccount? @relation(fields: [reviewedByAdminId], references: [id], onDelete: SetNull)
+
+  @@index([decision, createdAt])
+  @@index([memberId])
+  @@map("alumni_review")
+}
+
+model GraduationRequest {
+  id                String             @id @default(uuid(7)) @db.Uuid
+  memberId          String             @map("member_id") @db.Uuid
+  programme         Programme
+  graduationYear    Int                @map("graduation_year") @db.SmallInt
+  decision          GraduationDecision @default(PENDING)
+  privateReason     String?            @map("private_reason") @db.VarChar(1000)
+  reviewedByAdminId String?            @map("reviewed_by_admin_id") @db.Uuid
+  decidedAt         DateTime?          @map("decided_at") @db.Timestamptz(6)
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  member     MemberAccount         @relation(fields: [memberId], references: [id])
+  reviewedBy AdministratorAccount? @relation(fields: [reviewedByAdminId], references: [id], onDelete: SetNull)
+
+  @@unique([memberId], where: { decision: "PENDING" }, map: "graduation_request_one_pending_key")
+  @@index([decision, createdAt])
+  @@map("graduation_request")
+}
+
+/// HMAC-SHA-256 of a deleted confirmed-fake account's lower-case email (NFR-8).
+model BlockedEmailHash {
+  emailHmac        String   @id @map("email_hmac")
+  blockedByAdminId String?  @map("blocked_by_admin_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  blockedBy AdministratorAccount? @relation(fields: [blockedByAdminId], references: [id], onDelete: SetNull)
+
+  @@map("blocked_email_hash")
+}

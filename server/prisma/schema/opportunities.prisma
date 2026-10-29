@@ -1,0 +1,52 @@
+// opportunities package (ODD Section 3.6, Table 15).
+
+enum OpportunityType {
+  INTERNSHIP
+  PART_TIME
+  FULL_TIME
+
+  @@map("opportunity_type")
+}
+
+enum WorkArrangement {
+  ON_SITE
+  REMOTE
+  HYBRID
+
+  @@map("work_arrangement")
+}
+
+enum OpportunityState {
+  OPEN
+  CLOSED
+  HIDDEN
+
+  @@map("opportunity_state")
+}
+
+/// Listing by a Staff member or Verified Alumni. Closure is final; the deadline never closes it.
+model Opportunity {
+  id              String                   @id @default(uuid(7)) @db.Uuid
+  authorId        String                   @map("author_id") @db.Uuid
+  title           String                   @db.VarChar(160)
+  organization    String                   @db.VarChar(160)
+  location        String                   @db.VarChar(160)
+  type            OpportunityType
+  workArrangement WorkArrangement          @map("work_arrangement")
+  description     String                   @db.VarChar(10000)
+  applyVia        String                   @map("apply_via") @db.VarChar(500)
+  deadline        DateTime?                @db.Date
+  state           OpportunityState         @default(OPEN)
+  version         Int                      @default(1)
+  createdAt       DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(6)
+  /// Generated column over title, organization, location and description.
+  searchVector    Unsupported("tsvector")? @default(dbgenerated("((setweight(to_tsvector('simple'::regconfig, (title)::text), 'A'::\"char\") || setweight(to_tsvector('simple'::regconfig, (((organization)::text || ' '::text) || (location)::text)), 'B'::\"char\")) || setweight(to_tsvector('simple'::regconfig, (description)::text), 'C'::\"char\"))")) @map("search_vector")
+
+  author MemberAccount @relation(fields: [authorId], references: [id])
+
+  @@index([state, createdAt(sort: Desc)])
+  @@index([authorId])
+  @@index([searchVector], type: Gin)
+  @@map("opportunity")
+}

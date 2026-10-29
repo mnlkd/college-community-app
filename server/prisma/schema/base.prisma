@@ -1,0 +1,21 @@
+// HiLCoE Commons database schema. One file per server package (ODD Section 2);
+// tables and columns are snake_case as in SDD Figures 3 and 4.
+// The application tables live in the private "app" schema, which the Supabase
+// REST API does not expose to browsers.
+//
+// Prisma does not model CHECK constraints or generated columns; they are written by
+// hand in the migrations. search_vector columns are GENERATED ALWAYS ... STORED, which
+// Prisma reads as dbgenerated() defaults, so the expressions below must match the
+// normalized SQL exactly. `npm run db:drift -w server` must print an empty migration.
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../../src/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+  previewFeatures     = ["partialIndexes", "relationJoins"]
+}
+
+datasource db {
+  provider = "postgresql"
+}

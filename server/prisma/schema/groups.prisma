@@ -1,0 +1,93 @@
+// groups package (ODD Section 3.7, Table 17). Occupancy is the number of ACCEPTED
+// memberships and includes the owner.
+
+enum GroupState {
+  OPEN
+  CLOSED
+
+  @@map("group_state")
+}
+
+enum MembershipState {
+  PENDING
+  ACCEPTED
+  DECLINED
+  LEFT
+
+  @@map("membership_state")
+}
+
+enum TransferState {
+  PENDING
+  ACCEPTED
+  DECLINED
+  CANCELLED
+
+  @@map("transfer_state")
+}
+
+model Group {
+  id                  String                   @id @default(uuid(7)) @db.Uuid
+  ownerId             String                   @map("owner_id") @db.Uuid
+  title               String                   @db.VarChar(160)
+  description         String                   @db.VarChar(5000)
+  /// Positive (CHECK); includes the owner.
+  maxOccupancy        Int                      @map("max_occupancy") @db.SmallInt
+  /// Shown only to accepted members; withheld while the owner is disabled.
+  coordinationDetails String?                  @map("coordination_details") @db.VarChar(5000)
+  state               GroupState               @default(OPEN)
+  /// Edit version (ODD Section 1.2: an edit carries the version the member saw).
+  version             Int                      @default(1)
+  createdAt           DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(6)
+  /// Generated column over title and description.
+  searchVector        Unsupported("tsvector")? @default(dbgenerated("(setweight(to_tsvector('simple'::regconfig, (title)::text), 'A'::\"char\") || setweight(to_tsvector('simple'::regconfig, (description)::text), 'C'::\"char\"))")) @map("search_vector")
+
+  owner       MemberAccount     @relation(fields: [ownerId], references: [id])
+  memberships GroupMembership[]
+  transfers   GroupTransfer[]
+
+  @@index([state, createdAt(sort: Desc)])
+  @@index([ownerId])
+  @@index([searchVector], type: Gin)
+  @@map("group")
+}
+
+/// At most one PENDING or ACCEPTED membership per Student and group. A withdrawn request is deleted.
+model GroupMembership {
+  id        String          @id @default(uuid(7)) @db.Uuid
+  groupId   String          @map("group_id") @db.Uuid
+  memberId  String          @map("member_id") @db.Uuid
+  state     MembershipState @default(PENDING)
+  /// Set on approval.
+  joinedAt  DateTime?       @map("joined_at") @db.Timestamptz(6)
+  createdAt DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  group  Group         @relation(fields: [groupId], references: [id])
+  member MemberAccount @relation(fields: [memberId], references: [id])
+
+  @@unique([groupId, memberId], where: raw("(state = ANY (ARRAY['PENDING'::membership_state, 'ACCEPTED'::membership_state]))"), map: "group_membership_one_open_key")
+  @@index([groupId, state])
+  @@index([memberId, state])
+  @@map("group_membership")
+}
+
+/// Ownership transfer proposal; at most one PENDING per group.
+model GroupTransfer {
+  id          String        @id @default(uuid(7)) @db.Uuid
+  groupId     String        @map("group_id") @db.Uuid
+  fromOwnerId String        @map("from_owner_id") @db.Uuid
+  toMemberId  String        @map("to_member_id") @db.Uuid
+  state       TransferState @default(PENDING)
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  decidedAt   DateTime?     @map("decided_at") @db.Timestamptz(6)
+
+  group     Group         @relation(fields: [groupId], references: [id])
+  fromOwner MemberAccount @relation("GroupTransferFrom", fields: [fromOwnerId], references: [id])
+  toMember  MemberAccount @relation("GroupTransferTo", fields: [toMemberId], references: [id])
+
+  @@unique([groupId], where: { state: "PENDING" }, map: "group_transfer_one_pending_key")
+  @@index([toMemberId, state])
+  @@map("group_transfer")
+}

@@ -1,0 +1,9 @@
+docs/
+README.md
+**/dist/
+**/generated/
+server/prisma/migrations/
+supabase/.temp/
+package-lock.json
+playwright-report/
+test-results/

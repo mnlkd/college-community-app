@@ -1,0 +1,47 @@
+{
+  "name": "@hilcoe/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --conditions=@hilcoe/source --env-file-if-exists=.env src/infrastructure/server.ts",
+    "build": "prisma generate && tsc -p tsconfig.build.json",
+    "start": "node --env-file-if-exists=.env dist/infrastructure/server.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "db:migrate:dev": "prisma migrate dev",
+    "db:seed": "tsx --conditions=@hilcoe/source --env-file-if-exists=.env scripts/seed.ts",
+    "db:reseed": "tsx --conditions=@hilcoe/source --env-file-if-exists=.env scripts/seed.ts --reseed",
+    "cleanup": "tsx --conditions=@hilcoe/source --env-file-if-exists=.env scripts/cleanup.ts",
+    "postinstall": "prisma generate",
+    "db:drift": "prisma migrate diff --from-config-datasource --to-schema prisma/schema --exit-code"
+  },
+  "dependencies": {
+    "@hilcoe/shared": "^0.0.0",
+    "@prisma/adapter-pg": "^7.10.0",
+    "@prisma/client": "^7.10.0",
+    "@supabase/supabase-js": "^2.117.2",
+    "express": "^5.2.1",
+    "helmet": "^8.3.0",
+    "jose": "^6.2.12",
+    "multer": "^2.4.0",
+    "pg": "^8.23.1",
+    "pino": "^10.3.1",
+    "pino-http": "^11.0.0",
+    "sharp": "^0.35.5",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/multer": "^2.3.0",
+    "@types/node": "^24.19.0",
+    "@types/pg": "^8.23.1",
+    "@types/supertest": "^7.2.1",
+    "prisma": "^7.10.0",
+    "supertest": "^7.3.0",
+    "tsx": "^4.23.15",
+    "vitest": "^5.0.3"
+  }
+}

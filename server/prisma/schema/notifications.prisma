@@ -1,0 +1,43 @@
+// notifications package (ODD Section 3.8, Table 19).
+
+enum NotificationType {
+  COMMENT
+  REPLY
+  LIKE
+  MENTORSHIP_REQUEST
+  MENTORSHIP_OUTCOME
+  GROUP_REQUEST
+  GROUP_OUTCOME
+  GROUP_TRANSFER
+  ALUMNI_DECISION
+  GRADUATION_DECISION
+  MODERATION_OUTCOME
+  REPORT_OUTCOME
+
+  @@map("notification_type")
+}
+
+/// A notice to one member. eventKey is unique per recipient, so an event never gives two notices.
+model Notification {
+  id          String           @id @default(uuid(7)) @db.Uuid
+  recipientId String           @map("recipient_id") @db.Uuid
+  type        NotificationType
+  eventKey    String           @map("event_key") @db.VarChar(200)
+  /// Null for Administrator decisions and report outcomes.
+  actorId     String?          @map("actor_id") @db.Uuid
+  targetType  String           @map("target_type") @db.VarChar(40)
+  targetId    String           @map("target_id") @db.Uuid
+  unread      Boolean          @default(true)
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// createdAt plus 90 days (NFR-8).
+  expiresAt   DateTime         @map("expires_at") @db.Timestamptz(6)
+
+  recipient MemberAccount  @relation("NotificationRecipient", fields: [recipientId], references: [id])
+  actor     MemberAccount? @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@unique([recipientId, eventKey])
+  @@index([recipientId, createdAt(sort: Desc)])
+  @@index([recipientId], where: { unread: true }, map: "notification_unread_idx")
+  @@index([expiresAt])
+  @@map("notification")
+}

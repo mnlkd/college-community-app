@@ -1,0 +1,73 @@
+// mentorship package (ODD Section 3.5, Table 13).
+
+enum MentorshipState {
+  PENDING
+  ACTIVE
+  DECLINED
+  WITHDRAWN
+  ENDED
+
+  @@map("mentorship_state")
+}
+
+enum ContactKind {
+  EMAIL
+  TELEGRAM
+  PHONE
+  OTHER
+
+  @@map("contact_kind")
+}
+
+/// Mentoring settings of a Staff member or Verified Alumni.
+model MentorProfile {
+  memberId     String   @id @map("member_id") @db.Uuid
+  available    Boolean  @default(false)
+  /// Positive (CHECK).
+  capacity     Int      @db.SmallInt
+  introduction String?  @db.VarChar(500)
+  /// At most five (CHECK), each at most 160 characters.
+  topics       String[] @db.VarChar(160)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  member   MemberAccount   @relation(fields: [memberId], references: [id])
+  contacts MentorContact[]
+
+  @@index([available])
+  @@map("mentor_profile")
+}
+
+/// A contact the mentor shares with active mentees only; one per kind.
+model MentorContact {
+  id                     String      @id @default(uuid(7)) @db.Uuid
+  mentorId               String      @map("mentor_id") @db.Uuid
+  kind                   ContactKind
+  value                  String      @db.VarChar(500)
+  visibleAfterAcceptance Boolean     @default(true) @map("visible_after_acceptance")
+
+  mentor MentorProfile @relation(fields: [mentorId], references: [memberId], onDelete: Cascade)
+
+  @@unique([mentorId, kind])
+  @@map("mentor_contact")
+}
+
+/// At most one PENDING or ACTIVE mentorship per Student and mentor pair.
+model Mentorship {
+  id          String          @id @default(uuid(7)) @db.Uuid
+  studentId   String          @map("student_id") @db.Uuid
+  mentorId    String          @map("mentor_id") @db.Uuid
+  topic       String          @db.VarChar(160)
+  note        String          @db.VarChar(1000)
+  state       MentorshipState @default(PENDING)
+  requestedAt DateTime        @default(now()) @map("requested_at") @db.Timestamptz(6)
+  decidedAt   DateTime?       @map("decided_at") @db.Timestamptz(6)
+  updatedAt   DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  student MemberAccount @relation("MentorshipStudent", fields: [studentId], references: [id])
+  mentor  MemberAccount @relation("MentorshipMentor", fields: [mentorId], references: [id])
+
+  @@unique([studentId, mentorId], where: raw("(state = ANY (ARRAY['PENDING'::mentorship_state, 'ACTIVE'::mentorship_state]))"), map: "mentorship_one_open_per_pair_key")
+  @@index([mentorId, state])
+  @@index([studentId, state])
+  @@map("mentorship")
+}

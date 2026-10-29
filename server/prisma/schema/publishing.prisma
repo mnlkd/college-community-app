@@ -1,0 +1,146 @@
+// publishing package (ODD Section 3.3, Table 9).
+
+enum PostState {
+  VISIBLE
+  ARCHIVED
+  HIDDEN
+
+  @@map("post_state")
+}
+
+enum CommentState {
+  VISIBLE
+  DELETED
+  HIDDEN
+
+  @@map("comment_state")
+}
+
+/// Plain-text post; never empty (text, at least one image, or both).
+model Post {
+  id           String                   @id @default(uuid(7)) @db.Uuid
+  authorId     String                   @map("author_id") @db.Uuid
+  body         String?                  @db.VarChar(10000)
+  state        PostState                @default(VISIBLE)
+  version      Int                      @default(1)
+  viewCount    Int                      @default(0) @map("view_count")
+  createdAt    DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(6)
+  /// Generated column: to_tsvector('simple', body) (SDD Section 2.3).
+  searchVector Unsupported("tsvector")? @default(dbgenerated("to_tsvector('simple'::regconfig, (COALESCE(body, ''::character varying))::text)")) @map("search_vector")
+
+  author   MemberAccount @relation(fields: [authorId], references: [id])
+  images   PostImage[]
+  tags     PostTag[]
+  comments Comment[]
+  likes    Like[]
+  views    PostViewDay[]
+
+  @@index([state, createdAt(sort: Desc)])
+  @@index([authorId, createdAt])
+  @@index([searchVector], type: Gin)
+  @@map("post")
+}
+
+/// Post image processed to a 1600 px long edge in the private post-images bucket.
+model PostImage {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  postId       String   @map("post_id") @db.Uuid
+  storageKey   String   @unique @map("storage_key")
+  /// 1 to 4 (CHECK). Null for an image removed from its post but held as evidence.
+  position     Int?     @db.SmallInt
+  altText      String?  @map("alt_text") @db.VarChar(250)
+  /// True while a report holds the image as evidence, so the file is not removed.
+  evidenceHold Boolean  @default(false) @map("evidence_hold")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  post     Post                 @relation(fields: [postId], references: [id], onDelete: Cascade)
+  evidence ModerationEvidence[]
+
+  @@unique([postId, position])
+  @@map("post_image")
+}
+
+model Tag {
+  id              String @id @default(uuid(7)) @db.Uuid
+  normalizedLabel String @unique @map("normalized_label") @db.VarChar(30)
+
+  posts PostTag[]
+
+  @@map("tag")
+}
+
+model PostTag {
+  postId String @map("post_id") @db.Uuid
+  tagId  String @map("tag_id") @db.Uuid
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tagId], references: [id])
+
+  @@id([postId, tagId])
+  @@index([tagId])
+  @@map("post_tag")
+}
+
+/// Comment or reply; replies to replies attach to the same top-level comment.
+model Comment {
+  id              String       @id @default(uuid(7)) @db.Uuid
+  postId          String       @map("post_id") @db.Uuid
+  authorId        String       @map("author_id") @db.Uuid
+  parentCommentId String?      @map("parent_comment_id") @db.Uuid
+  /// Null after deletion.
+  body            String?      @db.VarChar(2000)
+  state           CommentState @default(VISIBLE)
+  version         Int          @default(1)
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  post    Post          @relation(fields: [postId], references: [id])
+  author  MemberAccount @relation(fields: [authorId], references: [id])
+  parent  Comment?      @relation("CommentReplies", fields: [parentCommentId], references: [id], onDelete: Restrict)
+  replies Comment[]     @relation("CommentReplies")
+  likes   Like[]
+
+  @@index([postId, parentCommentId, createdAt])
+  @@index([authorId])
+  @@index([createdAt])
+  @@map("comment")
+}
+
+/// One member's like of one post or one comment; exactly one target is set (CHECK).
+model Like {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  memberId  String   @map("member_id") @db.Uuid
+  postId    String?  @map("post_id") @db.Uuid
+  commentId String?  @map("comment_id") @db.Uuid
+  /// False after unlike, so a repeated like does not notify again.
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  member  MemberAccount @relation(fields: [memberId], references: [id])
+  post    Post?         @relation(fields: [postId], references: [id], onDelete: Restrict)
+  comment Comment?      @relation(fields: [commentId], references: [id], onDelete: Restrict)
+
+  @@unique([memberId, postId])
+  @@unique([memberId, commentId])
+  @@index([postId])
+  @@index([commentId])
+  @@index([updatedAt])
+  @@map("like")
+}
+
+/// A counted view of one post by one member on one UTC day; kept for the current day only.
+model PostViewDay {
+  memberId String   @map("member_id") @db.Uuid
+  postId   String   @map("post_id") @db.Uuid
+  utcDate  DateTime @map("utc_date") @db.Date
+
+  member MemberAccount @relation(fields: [memberId], references: [id])
+  post   Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@id([memberId, postId, utcDate])
+  @@index([postId])
+  @@index([utcDate])
+  @@map("post_view_day")
+}
